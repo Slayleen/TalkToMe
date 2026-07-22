@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StickerButton } from '@/src/components/Sticker';
 import { colors, radius, shadow, spacing, typography } from '@/src/theme';
-import { useGoogleIdTokenAuth } from '@/src/utils/googleAuth';
+import { useGoogleIdTokenAuth, googleAuthConfigured } from '@/src/utils/googleAuth';
 
 type Mode = 'signup' | 'login';
 
@@ -182,20 +182,24 @@ export function AuthScreen({ mode }: { mode: Mode }) {
               <Text style={{ color: '#B33', fontSize: 12, marginTop: 8, textAlign: 'center', fontWeight: '600' }}>{err}</Text>
             ) : null}
 
-            <View style={styles.dividerRow}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.divider} />
-            </View>
+            {googleAuthConfigured && (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.divider} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.divider} />
+                </View>
 
-            <StickerButton
-              testID="auth-gmail"
-              label="Continue with Gmail"
-              icon="logo-google"
-              variant="ghost"
-              fullWidth
-              onPress={busy ? undefined : handleGoogleAuth}
-            />
+                <StickerButton
+                  testID="auth-gmail"
+                  label="Continue with Gmail"
+                  icon="logo-google"
+                  variant="ghost"
+                  fullWidth
+                  onPress={busy ? undefined : handleGoogleAuth}
+                />
+              </>
+            )}
 
             <Pressable
               testID="auth-switch"

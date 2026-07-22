@@ -35,10 +35,23 @@ in sync with the transcript. Follow-up: improve clothing options + the gacha
 - Gacha redesign: flat crafted banner (removed gradient + twinkles), "What's inside"
   rarity showcase, removed "Or buy directly" section, tab renamed Gacha.
 
+## Implemented (2026-07-22, later)
+- GROQ_API_KEY set → backend groq:true; STT + chat validated (testing agent 10/10 backend).
+- Functional gacha PULLS: rarity roll from banner odds → epic/legendary unlocks a NEW
+  CHARACTER (if any un-owned), else clothes/backgrounds; duplicates → +50 coins. Animated
+  reveal modal (single + 10-pull grid), gem spend + "not enough gems" guard.
+- Shared InventoryProvider store (src/store/inventory.tsx): owned chars/items, equipped,
+  coins, gems; persisted via storage util. Wired into gacha, wardrobe, home.
+- Wardrobe now reads the store (owned/equipped/coins) + cycles owned characters.
+- Home locks un-owned characters (overlay + "Pull to Unlock"); shows gems/coins.
+- Starting balance: 50 gems / 240 coins.
+- Fixed AuthScreen web crash: googleAuth hook is inert + Gmail button hidden when no
+  Google client id configured (signup/login now render on web).
+
 ## Backlog
-- P0: Add GROQ_API_KEY → full E2E test of STT + chat + babble.
-- P1: Make gacha pulls functional (animation + reveal + add to wardrobe).
-- P2: Persist wardrobe equips to backend; session summary rewards; more characters.
+- P1: More pullable characters (needs new character art from user).
+- P1: Award gems/coins on completing a speaking session; persist to backend.
+- P2: Auth-gate (tabs)/session routes; migrate deprecated shadow*/pointerEvents (web warnings).
 
 ## Next tasks
 - User to provide Groq key; then run testing_agent on /api/chat/transcribe & /api/chat/message.

@@ -3,21 +3,30 @@ import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Each platform needs its OWN OAuth client id registered in Google Cloud
-// Console (see setup notes). A single "Web" client id, used with a custom
-// app-scheme redirect, is what caused flowName=GeneralOAuthFlow / 400s —
-// Google's generic web auth endpoint rejects custom-scheme redirects for
-// Web-type clients. This hook lets expo-auth-session pick the right
-// client + redirect strategy per platform automatically.
+const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
+const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+
+// Whether Google OAuth is set up. When false we must NOT call the Google hook —
+// expo-auth-session throws "Client Id property webClientId must be defined",
+// which would crash the entire auth screen.
+export const googleAuthConfigured = !!(WEB_CLIENT_ID || ANDROID_CLIENT_ID || IOS_CLIENT_ID);
+
+// Each platform needs its OWN OAuth client id registered in Google Cloud Console.
+// A single "Web" client id used with a custom app-scheme redirect causes 400s —
+// Google rejects custom-scheme redirects for Web-type clients. This hook lets
+// expo-auth-session pick the right client + redirect per platform automatically.
 export function useGoogleIdTokenAuth() {
+  // googleAuthConfigured is constant for the app's lifetime, so this branch never
+  // flips between renders — the hook call order stays stable.
+  if (!googleAuthConfigured) {
+    return [null, null, async () => {}] as const;
+  }
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   return Google.useIdTokenAuthRequest({
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    // PKCE only applies to the authorization-code flow. We're requesting
-    // an id_token directly (implicit flow), and Google rejects the request
-    // with "Parameter not allowed for this message type: code_challenge_method"
-    // if PKCE params are included alongside it.
+    androidClientId: ANDROID_CLIENT_ID,
+    iosClientId: IOS_CLIENT_ID,
+    webClientId: WEB_CLIENT_ID,
     usePKCE: false,
   });
 }
