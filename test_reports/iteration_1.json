@@ -1,0 +1,69 @@
+{
+  "summary": "Backend: 10/10 pytest passes — signup/login/me JWT flow, /api/chat/message (Groq Llama returning non-empty reply + optional correction), /api/chat/transcribe (Groq Whisper 200 with a generated WAV, NOT 503), and 401 gating on both chat routes. Health /api/ reports groq:true. Frontend web preview: gacha, wardrobe, home (Luna 'Speak Now', Mika lock overlay), and /session/speaking?id=luna (typewriter greeting) all render and behave correctly (pull-1 deducts 4 gems, pull-10 deducts 30, reveal + collect, 10 reveal cards, nogems-ok modal on empty gems, wardrobe item tap shows '✓ Wearing'). CRITICAL blocker: AuthScreen crashes on web with 'Client Id property webClientId must be defined to use Google auth on this platform' because EXPO_PUBLIC_GOOGLE_CLIENT_ID is not set — the entire email/password signup/login web flow is broken (Google hook is called unconditionally at the top of AuthScreen, throws before form renders). We tested downstream screens by navigating directly. Deprecated RN-Web warnings detected: shadow* style props, props.pointerEvents (report only). No expo-av/expo-barcode-scanner deprecated packages found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "AuthScreen",
+        "issue": "Component throws on web: 'Client Id property webClientId must be defined to use Google auth on this platform'. useGoogleIdTokenAuth() is called unconditionally at the top of the component (src/components/AuthScreen.tsx:27) and reads process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID from src/utils/googleAuth.ts:16, but that env var is not defined in /app/frontend/.env. As a result, /auth/signup and /auth/login screens render nothing (red error boundary) — email/password sign-up & login on web are completely blocked. Fix: guard the hook (only call it when the platform is native and/or a client id exists), OR add EXPO_PUBLIC_GOOGLE_CLIENT_ID to frontend/.env (and disable Google button gracefully when missing).",
+        "testID": "auth-email-input",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Web signup → home",
+        "issue": "Cannot be exercised end-to-end because AuthScreen crashes before the form is rendered (see CRITICAL above). Backend signup/login works via API. Once AuthScreen is fixed, the token+/auth/state persistence should be re-verified in UI.",
+        "affected_testIDs": ["auth-email-input", "auth-password-input", "auth-submit"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Home /home",
+        "issues": [
+          "The character carousel shows only one card at a time; both 'home-cta-unlock' and 'home-cta-speak' are rendered based on the currently focused card. That is expected but consider surfacing a small indicator that Mika is swipeable, so users don't miss the unlock CTA."
+        ]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "RN-Web deprecation",
+        "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' emitted repeatedly on web. Sweep styles that use shadowOffset/shadowRadius/shadowColor and migrate to boxShadow for web or wrap under Platform.OS !== 'web'. Reference: /app/frontend/src/theme.ts (shadow tokens) and multiple screens consuming them."
+      },
+      {
+        "component": "RN-Web deprecation",
+        "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Move pointerEvents from props to style. Reference: likely /app/frontend/src/components/* (Sticker/Doodles) — grep for `pointerEvents=`."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_backend.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix AuthScreen web crash: either (a) add EXPO_PUBLIC_GOOGLE_CLIENT_ID to /app/frontend/.env and restart expo, or (b) make useGoogleIdTokenAuth safe on web when webClientId is undefined (e.g., skip calling the hook / return a no-op tuple) and disable the 'Continue with Gmail' button. Recommended: (b) so preview remains usable without Google config.",
+    "Migrate RN 'shadow*' style props to 'boxShadow' (or gate on Platform.OS) and fix stray `pointerEvents` prop usage (move to style)."
+  ],
+  "critical_code_review_comments": [
+    "src/components/AuthScreen.tsx:27 unconditionally invokes useGoogleIdTokenAuth() which throws on web when webClientId is missing — this makes the ENTIRE login/signup screen unrenderable in web preview. Wrap in a Platform check or feature-flag.",
+    "src/utils/googleAuth.ts:16 reads process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID; consider a defensive default so the hook doesn't throw when the env is missing in preview builds.",
+    "Routes under /(tabs) and /session/* are not auth-gated on web — unauthenticated navigation to /gacha, /wardrobe, /home, /session/speaking succeeds and mutates a local (context+storage) inventory. Consider redirecting to /auth/login when no JWT is present (via _layout guard)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_backend.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "80%"
+  },
+  "seed_data_creation": "Backend tests create fresh users each run with prefix 'TEST_tester+<hex>@talktome.app' — safe to leave in Mongo (they don't collide).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend Groq keys are already set — /api/ returns groq:true. Use EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env. Run: pytest /app/backend/tests/ -v. For the frontend, once the AuthScreen crash is fixed, run playwright with viewport 390x844: sign up via /auth/signup (testID auth-email-input, auth-password-input, auth-confirm-input, auth-submit), then verify /home CTAs, /gacha pulls (shop-pull-1 costs 4 gems, shop-pull-10 costs 30 gems, reveal-collect closes reveal modal, nogems-ok when gems<4), and /wardrobe equip. Speaking screen at /session/speaking?id=luna renders typewriter greeting starting '¡Hola! Soy Luna. Toca el micrófono...'. Native mic recording (expo-audio) cannot be tested in headless web — only validate /api/chat/transcribe directly (already done).",
+  "rca_of_issue": "AuthScreen web crash — RCA: useIdTokenAuthRequest from expo-auth-session/providers/google performs an invariant check inside useMemo requiring the appropriate clientId for the current platform (webClientId on web). Because /app/frontend/.env doesn't define EXPO_PUBLIC_GOOGLE_CLIENT_ID, the value passed is undefined, invariantClientId throws, and React unmounts <AuthScreen> to its error boundary. Reproduction: open https://critter-chat-app.preview.emergentagent.com/auth/signup in a browser (viewport 390x844) — 'Uncaught Error: Client Id property webClientId must be defined to use Google auth on this platform.' appears. Mitigation: either populate EXPO_PUBLIC_GOOGLE_CLIENT_ID in frontend/.env, or refactor src/utils/googleAuth.ts to only call Google.useIdTokenAuthRequest when the current platform's client id is present (return a stubbed [null, null, async () => ({type:'dismiss'})] tuple otherwise) and disable the Google button in AuthScreen when the returned request is null."
+}

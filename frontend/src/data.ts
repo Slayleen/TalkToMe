@@ -1,5 +1,7 @@
 import { ImageSourcePropType } from 'react-native';
 
+import { Rarity } from '@/src/items';
+
 export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
 export type Character = {
@@ -27,6 +29,7 @@ export const CHARACTERS: Character[] = [
     vibe: 'Warm, patient, loves to tell stories over tea. Perfect for beginners who want to relax into the language.',
     image: require('../assets/characters/luna.png'),
     babblePitch: 380,
+    rarity: 'epic',
   },
   {
     id: 'mika',
@@ -39,6 +42,7 @@ export const CHARACTERS: Character[] = [
     vibe: 'Playful, quick with a joke, will gently correct you and drop a new phrase you\'ve never heard.',
     image: require('../assets/characters/mika.png'),
     babblePitch: 300,
+    rarity: 'legendary',
   },
 ];
 

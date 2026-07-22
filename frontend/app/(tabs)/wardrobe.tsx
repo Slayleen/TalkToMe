@@ -6,23 +6,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CHARACTERS } from '@/src/data';
 import { CATEGORIES, CategoryKey, ITEMS, Item, RARITY } from '@/src/items';
+import { useInventory } from '@/src/store/inventory';
 import { colors, radius, scenes, spacing, typography } from '@/src/theme';
 
-type EquipMap = Record<CategoryKey, string | undefined>;
-
 export default function WardrobeScreen() {
+  const inv = useInventory();
   const [tab, setTab] = useState<CategoryKey>('outfit');
-  const [equipped, setEquipped] = useState<EquipMap>(() => {
-    const map = { outfit: undefined, room: undefined, prop: undefined, frame: undefined } as EquipMap;
-    ITEMS.forEach((i) => {
-      if (i.equipped) map[i.category] = i.id;
-    });
-    return map;
-  });
-  const luna = CHARACTERS[0];
+
+  const ownedChars = CHARACTERS.filter((c) => inv.hasChar(c.id));
+  const activeChar = ownedChars.find((c) => c.id === inv.activeChar) ?? ownedChars[0] ?? CHARACTERS[0];
   const items = ITEMS.filter((i) => i.category === tab);
-  const equippedOutfit = useMemo(() => ITEMS.find((i) => i.id === equipped.outfit), [equipped.outfit]);
-  const ownedCount = ITEMS.filter((i) => i.owned).length;
+  const equippedOutfit = useMemo(() => ITEMS.find((i) => i.id === inv.equipped.outfit), [inv.equipped.outfit]);
+
+  const cycleChar = (dir: 1 | -1) => {
+    if (ownedChars.length < 2) return;
+    const idx = ownedChars.findIndex((c) => c.id === activeChar.id);
+    const next = (idx + dir + ownedChars.length) % ownedChars.length;
+    inv.setActiveChar(ownedChars[next].id);
+  };
 
   return (
     <View style={s.root} testID="wardrobe-screen">
@@ -34,13 +35,13 @@ export default function WardrobeScreen() {
         <View style={s.header}>
           <View>
             <Text style={s.title}>Wardrobe</Text>
-            <Text style={s.subtitle}>{ownedCount} pieces collected</Text>
+            <Text style={s.subtitle}>{inv.ownedItems.length} pieces · {ownedChars.length} friend{ownedChars.length === 1 ? '' : 's'}</Text>
           </View>
           <View style={s.coinsPill}>
             <View style={s.coinsShadow} />
             <View style={s.coinsFace}>
               <Ionicons name="ellipse" size={13} color={colors.onSurface} />
-              <Text style={s.coinsText}>240</Text>
+              <Text style={s.coinsText} testID="wardrobe-coins">{inv.coins}</Text>
             </View>
           </View>
         </View>
@@ -49,20 +50,27 @@ export default function WardrobeScreen() {
         <View style={s.stage} testID="wardrobe-stage">
           <View style={s.stageShadow} />
           <View style={s.stageFace}>
-            <Image source={luna.image} style={s.stageChar} contentFit="contain" />
+            <Image source={activeChar.image} style={s.stageChar} contentFit="contain" />
 
-            <View style={[s.rotBtn, { left: spacing.md }]}>
+            <Pressable
+              testID="wardrobe-char-prev"
+              onPress={() => cycleChar(-1)}
+              style={[s.rotBtn, { left: spacing.md }, ownedChars.length < 2 && { opacity: 0.4 }]}
+            >
               <Ionicons name="chevron-back" size={16} color={colors.onSurface} />
-            </View>
-            <View style={[s.rotBtn, { right: spacing.md }]}>
+            </Pressable>
+            <Pressable
+              testID="wardrobe-char-next"
+              onPress={() => cycleChar(1)}
+              style={[s.rotBtn, { right: spacing.md }, ownedChars.length < 2 && { opacity: 0.4 }]}
+            >
               <Ionicons name="chevron-forward" size={16} color={colors.onSurface} />
-            </View>
+            </Pressable>
 
             <View style={s.namePlate}>
-              <Text style={s.namePlateText}>{luna.name}</Text>
+              <Text style={s.namePlateText}>{activeChar.name}</Text>
             </View>
 
-            {/* currently-wearing chip */}
             <View style={s.wearingChip}>
               <Ionicons name="shirt" size={12} color={colors.onSurface} />
               <Text style={s.wearingText} numberOfLines={1}>
@@ -90,47 +98,48 @@ export default function WardrobeScreen() {
 
         {/* Item grid */}
         <ScrollView contentContainerStyle={s.grid} showsVerticalScrollIndicator={false} testID="wardrobe-grid">
-          {items.map((it) => (
-            <ItemCard
-              key={it.id}
-              item={it}
-              equipped={it.id === equipped[it.category]}
-              onPress={() => it.owned && setEquipped((m) => ({ ...m, [it.category]: it.id }))}
-            />
-          ))}
-          {items.length === 0 && <Text style={s.emptyText}>nothing here yet — check the Shop!</Text>}
+          {items.map((it) => {
+            const owned = inv.hasItem(it.id);
+            return (
+              <ItemCard
+                key={it.id}
+                item={it}
+                owned={owned}
+                equipped={it.id === inv.equipped[it.category]}
+                onPress={() => owned && inv.equip(it.category, it.id)}
+              />
+            );
+          })}
+          {items.length === 0 && <Text style={s.emptyText}>nothing here yet — go pull in Gacha!</Text>}
         </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
 
-function ItemCard({ item, equipped, onPress }: { item: Item; equipped: boolean; onPress: () => void }) {
+function ItemCard({ item, owned, equipped, onPress }: { item: Item; owned: boolean; equipped: boolean; onPress: () => void }) {
   const r = RARITY[item.rarity];
   return (
     <Pressable
       testID={`wardrobe-item-${item.id}`}
       onPress={onPress}
-      style={({ pressed }) => [s.cardWrap, pressed && item.owned && { transform: [{ translateY: 2 }] }]}
+      style={({ pressed }) => [s.cardWrap, pressed && owned && { transform: [{ translateY: 2 }] }]}
     >
       <View style={s.cardShadow} />
       <View style={[s.cardFace, equipped && { borderColor: colors.brandSecondary, borderWidth: 3 }]}>
-        {/* rarity ribbon */}
         <View style={[s.ribbon, { backgroundColor: r.ring }]}>
           <Text style={s.ribbonText}>{r.label}</Text>
         </View>
 
-        {/* collectible slot: rarity-tinted with dashed inner frame */}
         <View style={[s.slot, { backgroundColor: r.tint, borderColor: r.ring, borderWidth: r.border }]}>
           <View style={s.slotInner}>
             <Text style={s.slotEmoji}>{item.emoji}</Text>
           </View>
-          {item.owned && (
+          {owned ? (
             <View style={s.ownedBadge}>
               <Ionicons name="checkmark" size={12} color={colors.onSurface} />
             </View>
-          )}
-          {!item.owned && (
+          ) : (
             <View style={s.lockBadge}>
               <Ionicons name="lock-closed" size={11} color={colors.onSurfaceInverse} />
             </View>
@@ -140,13 +149,10 @@ function ItemCard({ item, equipped, onPress }: { item: Item; equipped: boolean; 
         <Text style={s.cardName} numberOfLines={1}>{item.name}</Text>
 
         <View style={[s.cardCta, equipped && { backgroundColor: colors.brandSecondary }]}>
-          {item.owned ? (
+          {owned ? (
             <Text style={s.cardCtaText}>{equipped ? '✓ Wearing' : 'Wear'}</Text>
           ) : (
-            <>
-              <Ionicons name={item.currency === 'gem' ? 'diamond' : 'ellipse'} size={11} color={colors.onSurface} />
-              <Text style={s.cardCtaText}>{item.price}</Text>
-            </>
+            <Text style={s.cardCtaText}>locked</Text>
           )}
         </View>
       </View>
@@ -230,22 +236,14 @@ const s = StyleSheet.create({
   },
   cardFace: {
     backgroundColor: colors.surfaceSecondary, borderRadius: radius.md,
-    borderWidth: 2, borderColor: colors.borderInk, padding: 6, alignItems: 'center',
-    overflow: 'hidden',
+    borderWidth: 2, borderColor: colors.borderInk, padding: 6, alignItems: 'center', overflow: 'hidden',
   },
   ribbon: {
     alignSelf: 'stretch', marginTop: -6, marginHorizontal: -6, marginBottom: 6,
-    paddingVertical: 2, alignItems: 'center',
-    borderBottomWidth: 2, borderBottomColor: colors.borderInk,
+    paddingVertical: 2, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: colors.borderInk,
   },
-  ribbonText: {
-    fontFamily: typography.display, fontSize: 9, color: colors.onSurface,
-    textTransform: 'uppercase', letterSpacing: 1,
-  },
-  slot: {
-    width: '100%', aspectRatio: 1, borderRadius: radius.sm,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
-  },
+  ribbonText: { fontFamily: typography.display, fontSize: 9, color: colors.onSurface, textTransform: 'uppercase', letterSpacing: 1 },
+  slot: { width: '100%', aspectRatio: 1, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   slotInner: {
     width: '78%', height: '78%', borderRadius: radius.sm - 2,
     borderWidth: 1.5, borderColor: 'rgba(74,50,25,0.35)', borderStyle: 'dashed',

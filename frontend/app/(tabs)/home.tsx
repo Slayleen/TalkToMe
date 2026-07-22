@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CHARACTERS, Character } from '@/src/data';
 import { DashedRule, Doodles, StickerButton } from '@/src/components/Sticker';
+import { useInventory } from '@/src/store/inventory';
 import { colors, radius, scenes, shadow, spacing, typography } from '@/src/theme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -34,7 +35,9 @@ export default function HomeScreen() {
     }
   }).current;
 
+  const inv = useInventory();
   const active = CHARACTERS[activeIndex];
+  const activeLocked = !inv.hasChar(active.id);
 
   return (
     <View style={styles.root} testID="home-screen">
@@ -56,7 +59,8 @@ export default function HomeScreen() {
           </View>
           <View style={styles.pills}>
             <StatPill icon="flame" value="7" tint={colors.warning} testID="home-streak" />
-            <StatPill icon="ellipse" value="240" tint={colors.brandYellow} testID="home-coins" />
+            <StatPill icon="diamond" value={String(inv.gems)} tint={colors.brandTertiary} testID="home-gems" />
+            <StatPill icon="ellipse" value={String(inv.coins)} tint={colors.brandYellow} testID="home-coins" />
           </View>
         </View>
 
@@ -73,7 +77,7 @@ export default function HomeScreen() {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           renderItem={({ item, index }) => (
-            <CharacterCard character={item} isActive={index === activeIndex} />
+            <CharacterCard character={item} isActive={index === activeIndex} locked={!inv.hasChar(item.id)} />
           )}
         />
 
@@ -101,15 +105,27 @@ export default function HomeScreen() {
 
             <View style={styles.ctaRow}>
               <View style={{ flex: 1 }}>
-                <StickerButton
-                  testID="home-cta-speak"
-                  label="Speak Now"
-                  icon="mic"
-                  variant="primary"
-                  small
-                  fullWidth
-                  onPress={() => router.push(`/session/speaking?id=${active.id}`)}
-                />
+                {activeLocked ? (
+                  <StickerButton
+                    testID="home-cta-unlock"
+                    label="Pull to Unlock"
+                    icon="lock-closed"
+                    variant="secondary"
+                    small
+                    fullWidth
+                    onPress={() => router.push('/gacha')}
+                  />
+                ) : (
+                  <StickerButton
+                    testID="home-cta-speak"
+                    label="Speak Now"
+                    icon="mic"
+                    variant="primary"
+                    small
+                    fullWidth
+                    onPress={() => router.push(`/session/speaking?id=${active.id}`)}
+                  />
+                )}
               </View>
             </View>
           </View>
@@ -130,7 +146,7 @@ function StatPill({
   );
 }
 
-function CharacterCard({ character, isActive }: { character: Character; isActive: boolean }) {
+function CharacterCard({ character, isActive, locked }: { character: Character; isActive: boolean; locked?: boolean }) {
   return (
     <View
       style={[
@@ -162,6 +178,14 @@ function CharacterCard({ character, isActive }: { character: Character; isActive
           <Text style={styles.cardName}>{character.name}</Text>
           <Text style={styles.cardTag}>✿ {character.tagline}</Text>
         </View>
+        {locked && (
+          <View style={styles.lockOverlay} testID={`character-locked-${character.id}`}>
+            <View style={styles.lockPill}>
+              <Ionicons name="lock-closed" size={22} color={colors.onSurfaceInverse} />
+            </View>
+            <Text style={styles.lockText}>Pull to unlock</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -242,6 +266,22 @@ const styles = StyleSheet.create({
     marginTop: 4, letterSpacing: -0.3,
   },
   cardTag: { fontSize: 13, color: colors.onSurfaceTertiary, fontWeight: '600' },
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(74,50,25,0.55)',
+    borderRadius: radius.xl,
+    alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+  },
+  lockPill: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: colors.surfaceInverse,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.onSurfaceInverse,
+  },
+  lockText: {
+    fontFamily: typography.display, fontSize: 15, color: colors.onSurfaceInverse,
+    letterSpacing: 0.5,
+  },
 
   dots: {
     flexDirection: 'row', justifyContent: 'center', gap: spacing.sm,
