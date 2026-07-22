@@ -1,31 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image, ImageBackground } from 'expo-image';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CHARACTERS } from '@/src/data';
-import { CATEGORIES, CategoryKey, ITEMS, Item } from '@/src/items';
+import { CATEGORIES, CategoryKey, ITEMS, Item, RARITY } from '@/src/items';
 import { colors, radius, scenes, spacing, typography } from '@/src/theme';
+
+type EquipMap = Record<CategoryKey, string | undefined>;
 
 export default function WardrobeScreen() {
   const [tab, setTab] = useState<CategoryKey>('outfit');
-  const [equippedId, setEquippedId] = useState('i3');
+  const [equipped, setEquipped] = useState<EquipMap>(() => {
+    const map = { outfit: undefined, room: undefined, prop: undefined, frame: undefined } as EquipMap;
+    ITEMS.forEach((i) => {
+      if (i.equipped) map[i.category] = i.id;
+    });
+    return map;
+  });
   const luna = CHARACTERS[0];
   const items = ITEMS.filter((i) => i.category === tab);
+  const equippedOutfit = useMemo(() => ITEMS.find((i) => i.id === equipped.outfit), [equipped.outfit]);
+  const ownedCount = ITEMS.filter((i) => i.owned).length;
 
   return (
     <View style={s.root} testID="wardrobe-screen">
-      {/* Illustrated wardrobe scene as backdrop, tinted */}
       <ImageBackground source={scenes.wardrobe} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(251,243,222,0.72)' }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(251,243,222,0.80)' }]} />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
         <View style={s.header}>
           <View>
             <Text style={s.title}>Wardrobe</Text>
-            <Text style={s.subtitle}>dress up your teahouse friends</Text>
+            <Text style={s.subtitle}>{ownedCount} pieces collected</Text>
           </View>
           <View style={s.coinsPill}>
             <View style={s.coinsShadow} />
@@ -40,14 +49,8 @@ export default function WardrobeScreen() {
         <View style={s.stage} testID="wardrobe-stage">
           <View style={s.stageShadow} />
           <View style={s.stageFace}>
-            {/* twinkles */}
-            <Text style={[s.twinkle, { top: 18, left: 22 }]}>✦</Text>
-            <Text style={[s.twinkle, { top: 40, right: 26 }]}>✧</Text>
-            <Text style={[s.twinkle, { bottom: 40, left: 30 }]}>♡</Text>
-
             <Image source={luna.image} style={s.stageChar} contentFit="contain" />
 
-            {/* rotate arrows */}
             <View style={[s.rotBtn, { left: spacing.md }]}>
               <Ionicons name="chevron-back" size={16} color={colors.onSurface} />
             </View>
@@ -55,9 +58,16 @@ export default function WardrobeScreen() {
               <Ionicons name="chevron-forward" size={16} color={colors.onSurface} />
             </View>
 
-            {/* name chip */}
             <View style={s.namePlate}>
               <Text style={s.namePlateText}>{luna.name}</Text>
+            </View>
+
+            {/* currently-wearing chip */}
+            <View style={s.wearingChip}>
+              <Ionicons name="shirt" size={12} color={colors.onSurface} />
+              <Text style={s.wearingText} numberOfLines={1}>
+                {equippedOutfit ? equippedOutfit.name : 'nothing on'}
+              </Text>
             </View>
           </View>
         </View>
@@ -67,20 +77,9 @@ export default function WardrobeScreen() {
           {CATEGORIES.map((c) => {
             const active = c.key === tab;
             return (
-              <Pressable
-                key={c.key}
-                testID={`wardrobe-cat-${c.key}`}
-                onPress={() => setTab(c.key)}
-                style={s.catBtn}
-              >
-                <View style={[
-                  s.catShadow,
-                  { opacity: active ? 0.55 : 0.3 },
-                ]} />
-                <View style={[
-                  s.catFace,
-                  active && { backgroundColor: colors.brandYellow, borderColor: colors.borderInk },
-                ]}>
+              <Pressable key={c.key} testID={`wardrobe-cat-${c.key}`} onPress={() => setTab(c.key)} style={s.catBtn}>
+                <View style={[s.catShadow, { opacity: active ? 0.55 : 0.3 }]} />
+                <View style={[s.catFace, active && { backgroundColor: colors.brandYellow }]}>
                   <Text style={s.catEmoji}>{c.emoji}</Text>
                   <Text style={[s.catLabel, active && s.catLabelActive]}>{c.label}</Text>
                 </View>
@@ -90,37 +89,24 @@ export default function WardrobeScreen() {
         </View>
 
         {/* Item grid */}
-        <ScrollView
-          contentContainerStyle={s.grid}
-          showsVerticalScrollIndicator={false}
-          testID="wardrobe-grid"
-        >
+        <ScrollView contentContainerStyle={s.grid} showsVerticalScrollIndicator={false} testID="wardrobe-grid">
           {items.map((it) => (
             <ItemCard
               key={it.id}
               item={it}
-              equipped={it.id === equippedId}
-              onPress={() => it.owned && setEquippedId(it.id)}
+              equipped={it.id === equipped[it.category]}
+              onPress={() => it.owned && setEquipped((m) => ({ ...m, [it.category]: it.id }))}
             />
           ))}
-          {items.length === 0 && (
-            <Text style={s.emptyText}>nothing here yet — check the Shop!</Text>
-          )}
+          {items.length === 0 && <Text style={s.emptyText}>nothing here yet — check the Shop!</Text>}
         </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
 
-function ItemCard({
-  item,
-  equipped,
-  onPress,
-}: {
-  item: Item;
-  equipped: boolean;
-  onPress: () => void;
-}) {
+function ItemCard({ item, equipped, onPress }: { item: Item; equipped: boolean; onPress: () => void }) {
+  const r = RARITY[item.rarity];
   return (
     <Pressable
       testID={`wardrobe-item-${item.id}`}
@@ -128,32 +114,38 @@ function ItemCard({
       style={({ pressed }) => [s.cardWrap, pressed && item.owned && { transform: [{ translateY: 2 }] }]}
     >
       <View style={s.cardShadow} />
-      <View style={s.cardFace}>
-        <View style={[s.cardThumb, { backgroundColor: item.color }]}>
-          <Text style={s.cardEmoji}>{item.emoji}</Text>
+      <View style={[s.cardFace, equipped && { borderColor: colors.brandSecondary, borderWidth: 3 }]}>
+        {/* rarity ribbon */}
+        <View style={[s.ribbon, { backgroundColor: r.ring }]}>
+          <Text style={s.ribbonText}>{r.label}</Text>
+        </View>
+
+        {/* collectible slot: rarity-tinted with dashed inner frame */}
+        <View style={[s.slot, { backgroundColor: r.tint, borderColor: r.ring, borderWidth: r.border }]}>
+          <View style={s.slotInner}>
+            <Text style={s.slotEmoji}>{item.emoji}</Text>
+          </View>
           {item.owned && (
             <View style={s.ownedBadge}>
               <Ionicons name="checkmark" size={12} color={colors.onSurface} />
             </View>
           )}
+          {!item.owned && (
+            <View style={s.lockBadge}>
+              <Ionicons name="lock-closed" size={11} color={colors.onSurfaceInverse} />
+            </View>
+          )}
         </View>
+
         <Text style={s.cardName} numberOfLines={1}>{item.name}</Text>
-        <View
-          style={[
-            s.cardBuy,
-            equipped && { backgroundColor: colors.brandSecondary, borderColor: colors.borderInk },
-          ]}
-        >
+
+        <View style={[s.cardCta, equipped && { backgroundColor: colors.brandSecondary }]}>
           {item.owned ? (
-            <Text style={s.cardBuyText}>{equipped ? '✓ Wearing' : 'Wear'}</Text>
+            <Text style={s.cardCtaText}>{equipped ? '✓ Wearing' : 'Wear'}</Text>
           ) : (
             <>
-              <Ionicons
-                name={item.currency === 'gem' ? 'diamond' : 'ellipse'}
-                size={11}
-                color={colors.onSurface}
-              />
-              <Text style={s.cardBuyText}>{item.price}</Text>
+              <Ionicons name={item.currency === 'gem' ? 'diamond' : 'ellipse'} size={11} color={colors.onSurface} />
+              <Text style={s.cardCtaText}>{item.price}</Text>
             </>
           )}
         </View>
@@ -168,13 +160,8 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md,
   },
-  title: {
-    fontFamily: typography.display, fontSize: 30, color: colors.onSurface,
-    letterSpacing: -0.3,
-  },
-  subtitle: {
-    marginTop: 2, fontSize: 12, color: colors.onSurfaceTertiary, fontWeight: '600',
-  },
+  title: { fontFamily: typography.display, fontSize: 30, color: colors.onSurface, letterSpacing: -0.3 },
+  subtitle: { marginTop: 2, fontSize: 12, color: colors.onSurfaceTertiary, fontWeight: '600' },
   coinsPill: { position: 'relative' },
   coinsShadow: {
     position: 'absolute', top: 4, left: 3, right: -3, bottom: -3,
@@ -183,8 +170,7 @@ const s = StyleSheet.create({
   coinsFace: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: spacing.md, paddingVertical: 6,
-    backgroundColor: colors.brandYellow,
-    borderRadius: radius.pill,
+    backgroundColor: colors.brandYellow, borderRadius: radius.pill,
     borderWidth: 2, borderColor: colors.borderInk,
   },
   coinsText: { fontFamily: typography.display, fontSize: 14, color: colors.onSurface },
@@ -195,61 +181,46 @@ const s = StyleSheet.create({
     backgroundColor: colors.borderInk, borderRadius: radius.xl, opacity: 0.4,
   },
   stageFace: {
-    height: 260,
-    backgroundColor: 'rgba(255,251,240,0.82)',
-    borderRadius: radius.xl,
+    height: 250, backgroundColor: 'rgba(255,251,240,0.85)', borderRadius: radius.xl,
     borderWidth: 2.5, borderColor: colors.borderInk,
-    alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  twinkle: {
-    position: 'absolute', fontSize: 18, color: colors.brandDeepRose,
-    fontFamily: typography.display,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   stageChar: { width: '80%', height: '95%' },
   rotBtn: {
-    position: 'absolute', top: '46%',
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: colors.surfaceSecondary,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: '46%', width: 32, height: 32, borderRadius: 16,
+    backgroundColor: colors.surfaceSecondary, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: colors.borderInk,
   },
   namePlate: {
-    position: 'absolute', top: 14,
-    backgroundColor: colors.surfaceSecondary,
-    paddingHorizontal: spacing.md, paddingVertical: 4,
-    borderRadius: radius.pill,
+    position: 'absolute', top: 14, backgroundColor: colors.surfaceSecondary,
+    paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill,
     borderWidth: 2, borderColor: colors.borderInk,
   },
-  namePlateText: {
-    fontFamily: typography.display, fontSize: 15, color: colors.onSurface,
+  namePlateText: { fontFamily: typography.display, fontSize: 15, color: colors.onSurface },
+  wearingChip: {
+    position: 'absolute', bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5,
+    maxWidth: '80%', backgroundColor: colors.brandSecondary,
+    paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill,
+    borderWidth: 2, borderColor: colors.borderInk,
   },
+  wearingText: { fontFamily: typography.display, fontSize: 12, color: colors.onSurface },
 
-  catRow: {
-    flexDirection: 'row', gap: 6,
-    paddingHorizontal: spacing.lg, marginTop: spacing.md,
-  },
+  catRow: { flexDirection: 'row', gap: 6, paddingHorizontal: spacing.lg, marginTop: spacing.md },
   catBtn: { flex: 1, position: 'relative' },
   catShadow: {
     position: 'absolute', top: 4, left: 2, right: -2, bottom: -3,
     backgroundColor: colors.borderInk, borderRadius: radius.md,
   },
   catFace: {
-    alignItems: 'center', paddingVertical: 8,
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: radius.md,
-    borderWidth: 2, borderColor: colors.borderInk,
+    alignItems: 'center', paddingVertical: 8, backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.md, borderWidth: 2, borderColor: colors.borderInk,
   },
   catEmoji: { fontSize: 18 },
-  catLabel: {
-    fontFamily: typography.display, fontSize: 11, color: colors.onSurfaceTertiary, marginTop: 2,
-  },
+  catLabel: { fontFamily: typography.display, fontSize: 11, color: colors.onSurfaceTertiary, marginTop: 2 },
   catLabelActive: { color: colors.onSurface },
 
   grid: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxxl,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxxl,
     flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md,
   },
   cardWrap: { width: '30.5%', position: 'relative' },
@@ -258,40 +229,46 @@ const s = StyleSheet.create({
     backgroundColor: colors.borderInk, borderRadius: radius.md, opacity: 0.4,
   },
   cardFace: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: radius.md,
-    borderWidth: 2, borderColor: colors.borderInk,
-    padding: 6, alignItems: 'center',
+    backgroundColor: colors.surfaceSecondary, borderRadius: radius.md,
+    borderWidth: 2, borderColor: colors.borderInk, padding: 6, alignItems: 'center',
+    overflow: 'hidden',
   },
-  cardThumb: {
-    width: '100%', aspectRatio: 1,
-    borderRadius: radius.sm,
-    borderWidth: 1.5, borderColor: colors.borderInk,
+  ribbon: {
+    alignSelf: 'stretch', marginTop: -6, marginHorizontal: -6, marginBottom: 6,
+    paddingVertical: 2, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: colors.borderInk,
+  },
+  ribbonText: {
+    fontFamily: typography.display, fontSize: 9, color: colors.onSurface,
+    textTransform: 'uppercase', letterSpacing: 1,
+  },
+  slot: {
+    width: '100%', aspectRatio: 1, borderRadius: radius.sm,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+  },
+  slotInner: {
+    width: '78%', height: '78%', borderRadius: radius.sm - 2,
+    borderWidth: 1.5, borderColor: 'rgba(74,50,25,0.35)', borderStyle: 'dashed',
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 6,
   },
-  cardEmoji: { fontSize: 34 },
+  slotEmoji: { fontSize: 32 },
   ownedBadge: {
-    position: 'absolute', top: 4, right: 4,
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: colors.brandSecondary,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11,
+    backgroundColor: colors.brandSecondary, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: colors.borderInk,
   },
-  cardName: {
-    fontFamily: typography.display, fontSize: 12, color: colors.onSurface,
-    marginBottom: 4,
+  lockBadge: {
+    position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11,
+    backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.borderInk,
   },
-  cardBuy: {
+  cardName: { fontFamily: typography.display, fontSize: 12, color: colors.onSurface, marginBottom: 4 },
+  cardCta: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: spacing.sm, paddingVertical: 3,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceTertiary,
-    borderWidth: 1.5, borderColor: colors.borderInk,
+    paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill,
+    backgroundColor: colors.surfaceTertiary, borderWidth: 1.5, borderColor: colors.borderInk,
   },
-  cardBuyText: {
-    fontFamily: typography.display, fontSize: 11, color: colors.onSurface,
-  },
+  cardCtaText: { fontFamily: typography.display, fontSize: 11, color: colors.onSurface },
   emptyText: {
     flex: 1, textAlign: 'center', color: colors.onSurfaceTertiary, fontSize: 13,
     marginTop: spacing.xxl, fontWeight: '600',

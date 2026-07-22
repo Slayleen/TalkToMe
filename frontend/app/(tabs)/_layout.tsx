@@ -42,7 +42,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="gacha"
         options={{
-          title: 'Shop',
+          title: 'Gacha',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={size} color={color} />
           ),
