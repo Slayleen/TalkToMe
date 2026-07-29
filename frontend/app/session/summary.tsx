@@ -2,29 +2,104 @@ import { Ionicons } from '@expo/vector-icons';
 import { ImageBackground } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CHARACTERS } from '@/src/data';
+import { LAST_SESSION_KEY, SessionCorrection, SessionLine, SessionRecord } from '@/src/session';
+import { useInventory } from '@/src/store/inventory';
 import { colors, radius, scenes, shadow, spacing, typography } from '@/src/theme';
+import { storage } from '@/src/utils/storage';
 
-const GLOW = [
-  'Used past tense correctly ("Fui a la escuela")',
-  'Great pronunciation on "aprendí"',
-  'Kept the conversation going with follow-up questions',
-];
+const EMPTY_RECORD: SessionRecord = {
+  characterId: '',
+  secs: 0,
+  transcript: [],
+  corrections: [],
+  coinsEarned: 0,
+  streak: 0,
+};
 
-const GROW = [
-  { wrong: 'I went to school', right: 'Fui a la escuela' },
-  { wrong: 'plantas biología', right: 'plantas en biología' },
-];
+// Pull short, distinct sentences the character actually said this session —
+// real vocabulary the learner was just exposed to, not invented examples.
+function extractPhrases(transcript: SessionLine[]): string[] {
+  const seen = new Set<string>();
+  const phrases: string[] = [];
+  for (const line of transcript) {
+    if (line.from !== 'bot') continue;
+    const sentences = line.text
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const sentence of sentences) {
+      const wordCount = sentence.split(/\s+/).filter(Boolean).length;
+      if (wordCount < 2 || wordCount > 7) continue;
+      const key = sentence.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      phrases.push(sentence);
+      if (phrases.length >= 5) return phrases;
+    }
+  }
+  return phrases;
+}
 
-const PHRASES = ['pasar el rato', 'me alegra verte', '¿qué tal?'];
+function buildGlowAreas(
+  userExchanges: number,
+  corrections: SessionCorrection[],
+  streak: number,
+  mm: string,
+  ss: string,
+  language: string,
+): string[] {
+  const glow: string[] = [];
+  if (userExchanges > 0) {
+    glow.push(`Completed ${userExchanges} exchange${userExchanges === 1 ? '' : 's'} in ${mm}:${ss}`);
+  }
+  glow.push(
+    corrections.length === 0
+      ? `No language mix-ups caught — clean ${language}!`
+      : `Caught and fixed ${corrections.length} language mix-up${corrections.length === 1 ? '' : 's'}`,
+  );
+  if (streak > 1) glow.push(`${streak}-day streak going 🔥`);
+  return glow;
+}
 
 export default function SessionSummary() {
   const router = useRouter();
+  const inventory = useInventory();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const character = CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
+  const [record, setRecord] = useState<SessionRecord>(EMPTY_RECORD);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await storage.getItem<string>(LAST_SESSION_KEY, '');
+        if (!cancelled && raw) {
+          setRecord(JSON.parse(raw) as SessionRecord);
+        }
+        // Consume it so a stray re-visit of this screen doesn't replay stale data.
+        await storage.removeItem(LAST_SESSION_KEY);
+      } catch {
+        // Keep the empty-record defaults below.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const userExchanges = record.transcript.filter((l) => l.from === 'user').length;
+  const mm = String(Math.floor(record.secs / 60)).padStart(2, '0');
+  const ss = String(record.secs % 60).padStart(2, '0');
+  const streak = record.streak || inventory.streak;
+
+  const glow = buildGlowAreas(userExchanges, record.corrections, streak, mm, ss, character.language);
+  const grow = record.corrections;
+  const phrases = extractPhrases(record.transcript);
 
   return (
     <View style={styles.root} testID="summary-screen">
@@ -49,14 +124,16 @@ export default function SessionSummary() {
           <Text style={styles.eyebrow}>session summary</Text>
           <Text style={styles.title}>You did it! 🎉</Text>
           <Text style={styles.subtitle}>
-            {character.name} says: “Gracias por practicar conmigo — you’re getting braver every day.”
+            {userExchanges > 0
+              ? `You and ${character.name} traded ${userExchanges} message${userExchanges === 1 ? '' : 's'} — nice work practicing your ${character.language.toLowerCase()}.`
+              : `${character.name} is looking forward to your next chat.`}
           </Text>
 
           {/* Reward strip */}
           <View style={styles.rewardStrip}>
-            <RewardCell icon="time-outline" value="4:32" label="time" testID="reward-time" />
-            <RewardCell icon="flame" value="+1" label="streak" tint={colors.warning} testID="reward-streak" />
-            <RewardCell icon="ellipse" value="+35" label="coins" tint={colors.brandYellow} testID="reward-coins" />
+            <RewardCell icon="time-outline" value={`${mm}:${ss}`} label="time" testID="reward-time" />
+            <RewardCell icon="flame" value={String(streak)} label="day streak" tint={colors.warning} testID="reward-streak" />
+            <RewardCell icon="ellipse" value={`+${record.coinsEarned}`} label="coins" tint={colors.brandYellow} testID="reward-coins" />
           </View>
 
           {/* Glow */}
@@ -70,7 +147,7 @@ export default function SessionSummary() {
                 Glow Areas
               </Text>
             </View>
-            {GLOW.map((g, i) => (
+            {glow.map((g, i) => (
               <View key={i} style={styles.bulletRow}>
                 <View style={[styles.bulletDot, { backgroundColor: colors.onBrandPrimary }]} />
                 <Text style={[styles.bulletText, { color: colors.onBrandPrimary }]}>{g}</Text>
@@ -89,12 +166,19 @@ export default function SessionSummary() {
                 Grow Areas
               </Text>
             </View>
-            {GROW.map((g, i) => (
-              <View key={i} style={styles.correctionCard}>
-                <Text style={styles.correctionWrong}>{g.wrong}</Text>
-                <Text style={styles.correctionRight}>→ {g.right}</Text>
-              </View>
-            ))}
+            {grow.length > 0 ? (
+              grow.map((g, i) => (
+                <View key={i} style={styles.correctionCard}>
+                  <Text style={styles.correctionWrong}>{g.wrong}</Text>
+                  <Text style={styles.correctionRight}>→ {g.right}</Text>
+                  {!!g.hint && <Text style={styles.correctionHint}>{g.hint}</Text>}
+                </View>
+              ))
+            ) : (
+              <Text style={styles.bulletText}>
+                No corrections this time — you stayed in {character.language} the whole way through!
+              </Text>
+            )}
           </View>
 
           {/* New phrases */}
@@ -108,16 +192,22 @@ export default function SessionSummary() {
                 New Phrases
               </Text>
             </View>
-            <View style={styles.phraseRow}>
-              {PHRASES.map((p) => (
-                <View
-                  key={p}
-                  style={[styles.phraseChip, { backgroundColor: colors.surfaceSecondary }]}
-                >
-                  <Text style={styles.phraseText}>{p}</Text>
-                </View>
-              ))}
-            </View>
+            {phrases.length > 0 ? (
+              <View style={styles.phraseRow}>
+                {phrases.map((p) => (
+                  <View
+                    key={p}
+                    style={[styles.phraseChip, { backgroundColor: colors.surfaceSecondary }]}
+                  >
+                    <Text style={styles.phraseText}>{p}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={[styles.bulletText, { color: colors.onBrandSecondary }]}>
+                Have a longer chat next time to collect some new phrases here!
+              </Text>
+            )}
           </View>
         </ScrollView>
 
@@ -261,6 +351,11 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     fontWeight: typography.weight.bold,
     marginTop: 2,
+  },
+  correctionHint: {
+    fontSize: typography.size.sm,
+    color: colors.onSurfaceTertiary,
+    marginTop: 4,
   },
   phraseRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   phraseChip: {

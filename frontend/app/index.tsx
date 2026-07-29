@@ -63,9 +63,11 @@ export default function StartPage() {
             ))}
           </LinearGradient>
 
-          <View style={styles.badgeShadow} />
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>meet Luna 🍵</Text>
+          <View style={styles.badgeWrap}>
+            <View style={styles.badgeShadow} />
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>meet Luna 🍵</Text>
+            </View>
           </View>
         </View>
 
@@ -159,13 +161,13 @@ const styles = StyleSheet.create({
     position: 'absolute', width: 8, height: 8, borderRadius: 4,
     backgroundColor: colors.borderInk,
   },
+  badgeWrap: { marginTop: spacing.lg, position: 'relative' },
   badgeShadow: {
-    marginTop: spacing.lg, width: 130, height: 34, backgroundColor: colors.borderStrong,
-    borderRadius: radius.pill, opacity: 0.5, transform: [{ translateY: 4 }, { translateX: 2 }],
-    position: 'absolute',
+    position: 'absolute', top: 4, left: 2, right: -2, bottom: -4,
+    backgroundColor: colors.borderStrong,
+    borderRadius: radius.pill, opacity: 0.5,
   },
   badge: {
-    marginTop: spacing.lg,
     backgroundColor: colors.brandSecondary,
     paddingHorizontal: spacing.lg, paddingVertical: 6,
     borderRadius: radius.pill,

@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ImageBackground } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { api, clearToken, User } from '@/src/api';
 import { CEFR_LEVELS, CEFRLevel } from '@/src/data';
+import { useInventory } from '@/src/store/inventory';
 import { colors, radius, scenes, shadow, spacing, typography } from '@/src/theme';
 
 const LANGUAGES = [
@@ -14,10 +16,67 @@ const LANGUAGES = [
   { code: 'fr', label: 'French', emoji: '🇫🇷', active: false },
 ];
 
+const LANG_CODE_TO_NAME: Record<string, string> = { es: 'Spanish', zh: 'Mandarin', fr: 'French' };
+const LANG_NAME_TO_CODE: Record<string, string> = { Spanish: 'es', Mandarin: 'zh', French: 'fr' };
+
 export default function AccountScreen() {
   const router = useRouter();
+  const inventory = useInventory();
   const [level, setLevel] = useState<CEFRLevel>('A2');
   const [lang, setLang] = useState('es');
+  const [user, setUser] = useState<User | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await api.me();
+        if (cancelled) return;
+        setUser(me);
+        setLevel((me.level as CEFRLevel) || 'A2');
+        setLang(LANG_NAME_TO_CODE[me.language] || 'es');
+      } catch {
+        // Not logged in or backend unreachable — screen still renders with
+        // local defaults; the logout button below still works regardless.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const changeLevel = (next: CEFRLevel) => {
+    setLevel(next);
+    api.updateState({ level: next }).catch(() => {});
+  };
+
+  const changeLanguage = (code: string) => {
+    setLang(code);
+    const name = LANG_CODE_TO_NAME[code];
+    if (name) api.updateState({ language: name }).catch(() => {});
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Log out?', "You'll need to log back in to keep practicing.", [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          setLoggingOut(true);
+          await clearToken();
+          router.replace('/');
+        },
+      },
+    ]);
+  };
+
+  const emailName = user?.email ? user.email.split('@')[0] : null;
+  const displayName = emailName ? emailName[0].toUpperCase() + emailName.slice(1) : 'Guest';
+  const memberSince = user?.created_at
+    ? `active since ${new Date(user.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`
+    : null;
 
   return (
     <View style={styles.root} testID="account-screen">
@@ -34,21 +93,21 @@ export default function AccountScreen() {
           <View style={styles.profileCard} testID="profile-card">
             <View style={styles.avatarRing}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarInitial}>A</Text>
+                <Text style={styles.avatarInitial}>{displayName[0]}</Text>
               </View>
             </View>
             <View style={{ flex: 1, marginLeft: spacing.lg }}>
-              <Text style={styles.profileName}>Ana</Text>
-              <Text style={styles.profileMeta}>ana@example.com</Text>
-              <Text style={styles.profileMeta}>active since May 2026</Text>
+              <Text style={styles.profileName}>{displayName}</Text>
+              <Text style={styles.profileMeta}>{user?.email ?? 'not logged in'}</Text>
+              {memberSince && <Text style={styles.profileMeta}>{memberSince}</Text>}
             </View>
           </View>
 
           {/* Stats row */}
           <View style={styles.statsRow}>
-            <StatBlock label="streak" value="7" icon="flame" tint={colors.warning} testID="stat-streak" />
-            <StatBlock label="sessions" value="14" icon="mic" tint={colors.brandTertiary} testID="stat-sessions" />
-            <StatBlock label="coins" value="240" icon="ellipse" tint={colors.brandYellow} testID="stat-coins" />
+            <StatBlock label="streak" value={String(inventory.streak)} icon="flame" tint={colors.warning} testID="stat-streak" />
+            <StatBlock label="sessions" value={String(inventory.sessionsCompleted)} icon="mic" tint={colors.brandTertiary} testID="stat-sessions" />
+            <StatBlock label="coins" value={String(inventory.coins)} icon="ellipse" tint={colors.brandYellow} testID="stat-coins" />
           </View>
 
           {/* Language */}
@@ -58,7 +117,7 @@ export default function AccountScreen() {
                 key={l.code}
                 testID={`lang-row-${l.code}`}
                 disabled={!l.active}
-                onPress={() => setLang(l.code)}
+                onPress={() => changeLanguage(l.code)}
                 style={({ pressed }) => [styles.row, pressed && l.active && { opacity: 0.8 }]}
               >
                 <Text style={styles.rowEmoji}>{l.emoji}</Text>
@@ -84,7 +143,7 @@ export default function AccountScreen() {
                   <Pressable
                     key={l.level}
                     testID={`level-${l.level}`}
-                    onPress={() => setLevel(l.level)}
+                    onPress={() => changeLevel(l.level)}
                     style={[styles.levelCell, active && styles.levelCellActive]}
                   >
                     <Text style={[styles.levelCode, active && styles.levelCodeActive]}>
@@ -108,11 +167,12 @@ export default function AccountScreen() {
 
           <Pressable
             testID="logout-button"
-            onPress={() => router.replace('/')}
-            style={({ pressed }) => [styles.logout, pressed && { opacity: 0.8 }]}
+            onPress={handleLogout}
+            disabled={loggingOut}
+            style={({ pressed }) => [styles.logout, pressed && { opacity: 0.8 }, loggingOut && { opacity: 0.6 }]}
           >
             <Ionicons name="log-out-outline" size={18} color={colors.onError} />
-            <Text style={styles.logoutText}>Log Out</Text>
+            <Text style={styles.logoutText}>{loggingOut ? 'Logging out…' : 'Log Out'}</Text>
           </Pressable>
 
           <Text style={styles.version}>Talk To Me · v0.1 base UI</Text>

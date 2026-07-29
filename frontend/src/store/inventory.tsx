@@ -14,9 +14,21 @@ type State = {
   activeChar: string;
   coins: number;
   gems: number;
+  streak: number;
+  sessionsCompleted: number;
+  lastSessionDate: string | null; // yyyy-mm-dd, local date of the last completed session
 };
 
 const KEY = 'tt_inventory_v1';
+
+const dateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const todayStr = () => dateStr(new Date());
+const yesterdayStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return dateStr(d);
+};
 
 const buildDefaults = (): State => {
   const equipped = {} as Equip;
@@ -31,6 +43,9 @@ const buildDefaults = (): State => {
     activeChar: 'luna',
     coins: 240,
     gems: 50,
+    streak: 0,
+    sessionsCompleted: 0,
+    lastSessionDate: null,
   };
 };
 
@@ -45,6 +60,10 @@ type Ctx = State & {
   spendGems: (n: number) => boolean;
   addCoins: (n: number) => void;
   addGems: (n: number) => void;
+  // Called once per finished speaking session: adds the reward coins, bumps the
+  // session counter, and advances the day-streak (only once per calendar day;
+  // resets to 1 if a day was missed).
+  recordSessionComplete: (coinsEarned: number) => { streak: number };
 };
 
 const InventoryContext = createContext<Ctx | null>(null);
@@ -96,6 +115,27 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     },
     addCoins: (n) => setState((s) => ({ ...s, coins: s.coins + n })),
     addGems: (n) => setState((s) => ({ ...s, gems: s.gems + n })),
+    recordSessionComplete: (coinsEarned) => {
+      let nextStreak = 1;
+      setState((s) => {
+        const today = todayStr();
+        if (s.lastSessionDate === today) {
+          nextStreak = Math.max(s.streak, 1); // already counted today
+        } else if (s.lastSessionDate === yesterdayStr()) {
+          nextStreak = s.streak + 1; // continued the streak
+        } else {
+          nextStreak = 1; // missed a day (or first ever session)
+        }
+        return {
+          ...s,
+          coins: s.coins + coinsEarned,
+          sessionsCompleted: s.sessionsCompleted + 1,
+          streak: nextStreak,
+          lastSessionDate: today,
+        };
+      });
+      return { streak: nextStreak };
+    },
   };
 
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;

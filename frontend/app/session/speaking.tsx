@@ -27,6 +27,9 @@ import { StickerButton } from '@/src/components/Sticker';
 import { colors, radius, scenes, spacing, typography } from '@/src/theme';
 import { api } from '@/src/api';
 import { startRecording, stopRecording } from '@/src/recorder';
+import { LAST_SESSION_KEY, SessionRecord, calcCoinsEarned } from '@/src/session';
+import { storage } from '@/src/utils/storage';
+import { useInventory } from '@/src/store/inventory';
 import { MS_PER_CHAR, cleanupBabble, initBabbleAudio, playBabble, stopBabble } from '@/src/utils/tts';
 
 type Line = { from: 'user' | 'bot'; text: string };
@@ -45,8 +48,12 @@ export default function SpeakingSession() {
   const [transcript, setTranscript] = useState<Line[]>([]);
   const [typing, setTyping] = useState<{ who: string; text: string; shown: number } | null>(null);
   const [police, setPolice] = useState<Correction | null>(null);
+  const [corrections, setCorrections] = useState<Correction[]>([]);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [permDenied, setPermDenied] = useState(false);
+  const [ending, setEnding] = useState(false);
+
+  const inventory = useInventory();
 
   const typingIv = useRef<any>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -182,6 +189,7 @@ export default function SpeakingSession() {
       setBusy(false);
       if (res.correction) {
         setPolice(res.correction);
+        setCorrections((p) => [...p, res.correction as Correction]);
         setTimeout(() => setPolice(null), 6000);
       }
       await revealBot(res.reply);
@@ -203,6 +211,38 @@ export default function SpeakingSession() {
     anim.start();
     return () => anim.stop();
   }, [micOn, pulse]);
+
+  const endSession = async () => {
+    if (ending) return;
+    setEnding(true);
+    setConfirmEnd(false);
+
+    const userExchanges = transcript.filter((l) => l.from === 'user').length;
+    const coinsEarned = calcCoinsEarned(userExchanges, corrections);
+    const { streak } = inventory.recordSessionComplete(coinsEarned);
+
+    const record: SessionRecord = {
+      characterId: character.id,
+      secs,
+      // Cap what we persist so a very long session can't bloat storage.
+      transcript: transcript.slice(-60),
+      corrections,
+      coinsEarned,
+      streak,
+    };
+    try {
+      await storage.setItem(LAST_SESSION_KEY, JSON.stringify(record));
+    } catch {
+      // Summary screen falls back to sensible defaults if this is missing.
+    }
+
+    // Best-effort sync to the account so it's not just a local number. Send the
+    // exact resulting streak (not a delta) since the local store already did the
+    // once-per-day logic and is the source of truth for it.
+    api.updateState({ delta_coins: coinsEarned, streak }).catch(() => {});
+
+    router.replace(`/session/summary?id=${character.id}`);
+  };
 
   const micLocked = busy || !!typing;
   const mm = String(Math.floor(secs / 60)).padStart(2, '0');
@@ -343,14 +383,11 @@ export default function SpeakingSession() {
                 <View style={{ flex: 1 }}>
                   <StickerButton
                     testID="modal-end"
-                    label="End"
+                    label={ending ? 'Saving…' : 'End'}
                     variant="primary"
                     small
                     fullWidth
-                    onPress={() => {
-                      setConfirmEnd(false);
-                      router.replace(`/session/summary?id=${character.id}`);
-                    }}
+                    onPress={ending ? undefined : endSession}
                   />
                 </View>
               </View>

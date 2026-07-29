@@ -36,7 +36,24 @@ GOOGLE_IOS_CLIENT_ID = os.environ.get("GOOGLE_IOS_CLIENT_ID", "")
 
 # --- Groq client (lazy so backend still boots if key missing) ---
 from groq import Groq  # noqa: E402
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+groq_client: Optional[Groq] = None
+if GROQ_API_KEY:
+    try:
+        groq_client = Groq(api_key=GROQ_API_KEY)
+    except Exception:
+        logging.getLogger("talk-to-me").exception(
+            "Failed to initialize Groq client even though GROQ_API_KEY is set. "
+            "Check that the 'groq' package installed matches requirements.txt "
+            "(a mismatched httpx version is a common cause)."
+        )
+else:
+    logging.getLogger("talk-to-me").warning(
+        "GROQ_API_KEY is not set - /api/chat/message and /api/chat/transcribe will "
+        "return 503 'Groq not configured' until it's added. Copy backend/.env.example "
+        "to backend/.env, add your key from https://console.groq.com/keys, and restart "
+        "the server."
+    )
 
 # --- Mongo ---
 client = AsyncIOMotorClient(MONGO_URL, serverSelectionTimeoutMS=5000)
@@ -313,7 +330,12 @@ def _system_prompt(char: str, vibe: str, target_lang: str, level: str) -> str:
 @api.post("/chat/message", response_model=ChatResp)
 async def chat_message(body: ChatBody, u=Depends(current_user)):
     if not groq_client:
-        raise HTTPException(503, "Groq not configured")
+        raise HTTPException(
+            503,
+            "Groq not configured: set GROQ_API_KEY in backend/.env (see "
+            "backend/.env.example) with a key from https://console.groq.com/keys, "
+            "then restart the backend.",
+        )
     sys_msg = _system_prompt(body.character_name, body.character_vibe, body.target_language, body.level)
     messages: List[Dict[str, str]] = [{"role": "system", "content": sys_msg}]
     for m in body.history[-8:]:
@@ -354,7 +376,12 @@ async def chat_message(body: ChatBody, u=Depends(current_user)):
 @api.post("/chat/transcribe")
 async def transcribe(file: UploadFile = File(...), u=Depends(current_user)):
     if not groq_client:
-        raise HTTPException(503, "Groq not configured")
+        raise HTTPException(
+            503,
+            "Groq not configured: set GROQ_API_KEY in backend/.env (see "
+            "backend/.env.example) with a key from https://console.groq.com/keys, "
+            "then restart the backend.",
+        )
     contents = await file.read()
     if not contents:
         raise HTTPException(400, "Empty audio file")
