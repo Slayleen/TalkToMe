@@ -55,6 +55,29 @@ export default function SpeakingSession() {
 
   const inventory = useInventory();
 
+  // What the user is actually practicing right now — set on the profile
+  // screen, not fixed per character. Defaults match the backend's defaults
+  // for a brand-new account while the profile call is in flight.
+  const [userLanguage, setUserLanguage] = useState('Spanish');
+  const [userLevel, setUserLevel] = useState('A2');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await api.me();
+        if (cancelled) return;
+        setUserLanguage(me.language || 'Spanish');
+        setUserLevel(me.level || 'A2');
+      } catch {
+        // Not logged in / unreachable — session still works with defaults.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const typingIv = useRef<any>(null);
   const scrollRef = useRef<ScrollView>(null);
   const greeted = useRef(false);
@@ -182,8 +205,8 @@ export default function SpeakingSession() {
         user_message: userText,
         character_name: character.name,
         character_vibe: character.vibe,
-        target_language: character.language,
-        level: character.level,
+        target_language: userLanguage,
+        level: userLevel,
         history,
       });
       setBusy(false);
@@ -223,6 +246,7 @@ export default function SpeakingSession() {
 
     const record: SessionRecord = {
       characterId: character.id,
+      language: userLanguage,
       secs,
       // Cap what we persist so a very long session can't bloat storage.
       transcript: transcript.slice(-60),
@@ -275,9 +299,6 @@ export default function SpeakingSession() {
             <View style={s.nameChipShadow} />
             <View style={s.nameChipFace}>
               <Text style={s.nameChipName}>{character.name}</Text>
-              <Text style={s.nameChipMeta}>
-                {character.languageEmoji} {character.language} · {character.level}
-              </Text>
             </View>
           </View>
         </SafeAreaView>
@@ -306,7 +327,6 @@ export default function SpeakingSession() {
           </View>
         )}
       </View>
-
       <View style={s.sheet}>
         <View style={s.grabber} />
         <Text style={s.sheetLabel}>✦ live transcript ✦</Text>
@@ -578,6 +598,4 @@ const s = StyleSheet.create({
     borderWidth: 2.5, borderColor: colors.borderInk,
   },
   modalTitle: { fontFamily: typography.display, fontSize: 22, color: colors.onSurface, letterSpacing: -0.3 },
-  modalBody: { marginTop: spacing.sm, fontSize: 14, color: colors.onSurfaceTertiary, lineHeight: 20, fontWeight: '500' },
-  modalActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
-});
+  modalBody: { marginTop: spacing.sm, fontSize: 14, color:

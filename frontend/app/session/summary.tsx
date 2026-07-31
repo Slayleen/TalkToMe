@@ -14,6 +14,7 @@ import { storage } from '@/src/utils/storage';
 
 const EMPTY_RECORD: SessionRecord = {
   characterId: '',
+  language: 'Spanish',
   secs: 0,
   transcript: [],
   corrections: [],
@@ -97,7 +98,7 @@ export default function SessionSummary() {
   const ss = String(record.secs % 60).padStart(2, '0');
   const streak = record.streak || inventory.streak;
 
-  const glow = buildGlowAreas(userExchanges, record.corrections, streak, mm, ss, character.language);
+  const glow = buildGlowAreas(userExchanges, record.corrections, streak, mm, ss, record.language);
   const grow = record.corrections;
   const phrases = extractPhrases(record.transcript);
 
@@ -125,7 +126,7 @@ export default function SessionSummary() {
           <Text style={styles.title}>You did it! 🎉</Text>
           <Text style={styles.subtitle}>
             {userExchanges > 0
-              ? `You and ${character.name} traded ${userExchanges} message${userExchanges === 1 ? '' : 's'} — nice work practicing your ${character.language.toLowerCase()}.`
+              ? `You and ${character.name} traded ${userExchanges} message${userExchanges === 1 ? '' : 's'} — nice work practicing your ${record.language.toLowerCase()}.`
               : `${character.name} is looking forward to your next chat.`}
           </Text>
 
@@ -176,7 +177,7 @@ export default function SessionSummary() {
               ))
             ) : (
               <Text style={styles.bulletText}>
-                No corrections this time — you stayed in {character.language} the whole way through!
+                No corrections this time — you stayed in {record.language} the whole way through!
               </Text>
             )}
           </View>

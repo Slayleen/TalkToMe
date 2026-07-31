@@ -8,9 +8,6 @@ export type Character = {
   id: string;
   name: string;
   tagline: string;
-  language: string;
-  languageEmoji: string;
-  level: CEFRLevel;
   accent: string; // hex tint for cards
   vibe: string;
   image: ImageSourcePropType;
@@ -22,9 +19,6 @@ export const CHARACTERS: Character[] = [
     id: 'luna',
     name: 'Luna',
     tagline: 'Cozy teahouse buddy',
-    language: 'Spanish',
-    languageEmoji: '🇪🇸',
-    level: 'A2',
     accent: '#FFB7B2',
     vibe: 'Warm, patient, loves to tell stories over tea. Perfect for beginners who want to relax into the language.',
     image: require('../assets/characters/luna.png'),
@@ -35,9 +29,6 @@ export const CHARACTERS: Character[] = [
     id: 'mika',
     name: 'Mika',
     tagline: 'Bookish sunshine',
-    language: 'Spanish',
-    languageEmoji: '🇪🇸',
-    level: 'B1',
     accent: '#C7CEEA',
     vibe: 'Playful, quick with a joke, will gently correct you and drop a new phrase you\'ve never heard.',
     image: require('../assets/characters/mika.png'),
@@ -45,6 +36,14 @@ export const CHARACTERS: Character[] = [
     rarity: 'legendary',
   },
 ];
+
+// Emoji shown next to the user's currently-selected practice language
+// (used on the home screen / speaking session, not tied to a character).
+export const LANGUAGE_EMOJI: Record<string, string> = {
+  Spanish: '🇪🇸',
+  Mandarin: '🇨🇳',
+  French: '🇫🇷',
+};
 
 export const CEFR_LEVELS: { level: CEFRLevel; label: string }[] = [
   { level: 'A1', label: 'Just starting' },

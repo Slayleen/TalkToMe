@@ -34,6 +34,20 @@ GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_ANDROID_CLIENT_ID = os.environ.get("GOOGLE_ANDROID_CLIENT_ID", "")
 GOOGLE_IOS_CLIENT_ID = os.environ.get("GOOGLE_IOS_CLIENT_ID", "")
 
+# Maps the language names used in the user profile / character data to the
+# ISO-639-1 codes Whisper expects, so transcription doesn't have to guess.
+LANG_NAME_TO_ISO = {
+    "Spanish": "es",
+    "Mandarin": "zh",
+    "French": "fr",
+    "English": "en",
+    "German": "de",
+    "Italian": "it",
+    "Portuguese": "pt",
+    "Japanese": "ja",
+    "Korean": "ko",
+}
+
 # --- Groq client (lazy so backend still boots if key missing) ---
 from groq import Groq  # noqa: E402
 
@@ -401,6 +415,12 @@ async def transcribe(file: UploadFile = File(...), u=Depends(current_user)):
         tmp.write(contents)
         tmp_path = tmp.name
 
+    # Use the language the user is currently practicing (set on their profile)
+    # instead of letting Whisper auto-detect, which is unreliable on short or
+    # accented clips and biased toward English.
+    target_lang_name = u.get("language", "Spanish")
+    iso_code = LANG_NAME_TO_ISO.get(target_lang_name)
+
     try:
         with open(tmp_path, "rb") as af:
             tr = groq_client.audio.transcriptions.create(
@@ -408,6 +428,7 @@ async def transcribe(file: UploadFile = File(...), u=Depends(current_user)):
                 model="whisper-large-v3-turbo",
                 response_format="verbose_json",
                 temperature=0.0,
+                **({"language": iso_code} if iso_code else {}),
             )
         text = getattr(tr, "text", None) or ""
         language = getattr(tr, "language", None)

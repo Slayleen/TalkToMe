@@ -6,6 +6,7 @@ export type SessionCorrection = { wrong: string; right: string; hint: string };
 
 export type SessionRecord = {
   characterId: string;
+  language: string;
   secs: number;
   transcript: SessionLine[];
   corrections: SessionCorrection[];

@@ -94,11 +94,6 @@ export default function HomeScreen() {
           <View style={styles.actionsFace}>
             <View style={styles.vibeHead}>
               <Text style={styles.vibeName}>{active.name}</Text>
-              <View style={styles.vibeMeta}>
-                <Text style={styles.vibeMetaText}>{active.languageEmoji} {active.language}</Text>
-                <View style={styles.vibeDot} />
-                <Text style={styles.vibeMetaText}>Level {active.level}</Text>
-              </View>
             </View>
             <DashedRule />
             <Text style={styles.vibeText}>{active.vibe}</Text>
@@ -167,14 +162,6 @@ function CharacterCard({ character, isActive, locked }: { character: Character; 
         </View>
 
         <View style={styles.cardFooter}>
-          <View style={styles.cardBadgeRow}>
-            <View style={styles.cardBadge}>
-              <Text style={styles.cardBadgeText}>{character.languageEmoji} {character.language}</Text>
-            </View>
-            <View style={[styles.cardBadge, { backgroundColor: character.accent }]}>
-              <Text style={styles.cardBadgeText}>{character.level}</Text>
-            </View>
-          </View>
           <Text style={styles.cardName}>{character.name}</Text>
           <Text style={styles.cardTag}>✿ {character.tagline}</Text>
         </View>
