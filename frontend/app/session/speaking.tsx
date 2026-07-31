@@ -327,6 +327,7 @@ export default function SpeakingSession() {
           </View>
         )}
       </View>
+
       <View style={s.sheet}>
         <View style={s.grabber} />
         <Text style={s.sheetLabel}>✦ live transcript ✦</Text>
@@ -598,4 +599,6 @@ const s = StyleSheet.create({
     borderWidth: 2.5, borderColor: colors.borderInk,
   },
   modalTitle: { fontFamily: typography.display, fontSize: 22, color: colors.onSurface, letterSpacing: -0.3 },
-  modalBody: { marginTop: spacing.sm, fontSize: 14, color:
+  modalBody: { marginTop: spacing.sm, fontSize: 14, color: colors.onSurfaceTertiary, lineHeight: 20, fontWeight: '500' },
+  modalActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+});
