@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import PyMongoError
 from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.cors import CORSMiddleware
 
@@ -210,9 +211,18 @@ def user_to_out(u: Dict[str, Any]) -> UserOut:
 @api.post("/auth/signup", response_model=TokenResp, status_code=201)
 async def signup(body: SignupBody):
     logger.info(f"Signup attempt for email: {body.email}")
-    existing = await db.users.find_one({"email": body.email})
+    try:
+        existing = await db.users.find_one({"email": body.email})
+    except PyMongoError:
+        logger.exception(
+            "Signup failed talking to MongoDB — check MONGO_URL / that Mongo is "
+            "reachable / Atlas IP allowlist."
+        )
+        raise HTTPException(503, "Database unavailable, please try again shortly")
+
     if existing:
         raise HTTPException(400, "Email already registered")
+
     import uuid
     uid = str(uuid.uuid4())
     user = {
@@ -223,14 +233,27 @@ async def signup(body: SignupBody):
         "owned_items": ["i3", "i7"],
         "equipped": {"outfit": "i3", "room": None, "prop": None, "frame": None},
     }
-    await db.users.insert_one(user)
+    try:
+        await db.users.insert_one(user)
+    except PyMongoError:
+        logger.exception("Signup failed inserting new user into MongoDB")
+        raise HTTPException(503, "Database unavailable, please try again shortly")
+
     logger.info(f"User created successfully: {uid}")
     return TokenResp(access_token=make_token(uid))
 
 
 @api.post("/auth/login", response_model=TokenResp)
 async def login(body: LoginBody):
-    user = await db.users.find_one({"email": body.email})
+    try:
+        user = await db.users.find_one({"email": body.email})
+    except PyMongoError:
+        logger.exception(
+            "Login failed talking to MongoDB — check MONGO_URL / that Mongo is "
+            "reachable / Atlas IP allowlist."
+        )
+        raise HTTPException(503, "Database unavailable, please try again shortly")
+
     if not user or not verify_pw(body.password, user["password"]):
         raise HTTPException(401, "Invalid email or password")
     return TokenResp(access_token=make_token(user["id"]))
